@@ -47,24 +47,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="Compiler\110_Parser.y">
-      <Filter>Compiler Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Compiler\110_Scanner.l">
-      <Filter>Compiler Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Compiler\150_Scanner.l">
-      <Filter>Compiler Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Compiler\150_Parser.y">
-      <Filter>Compiler Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Compiler\SSR_Scanner.l">
-      <Filter>Compiler Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="Compiler\SSR_Parser.y">
-      <Filter>Compiler Files</Filter>
-    </CustomBuild>
     <CustomBuild Include="Compiler\NEW_Parser.y">
       <Filter>Compiler Files</Filter>
     </CustomBuild>

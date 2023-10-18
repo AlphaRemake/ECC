@@ -26,14 +26,8 @@ FILE *_fProps; // [Cecil] Property lists for all classes
 char *_strFileNameBase;
 char *_strFileNameBaseIdentifier;
 
-// [Cecil] Generate sources compatibile with vanilla
-bool _bCompatibilityMode = false;
-
 // [Cecil] Export class from the library without specifying it in code
 bool _bForceExport = false;
-
-// [Cecil] Output file for the list of property references
-char *_strPropListFile = "";
 
 extern "C" int yywrap(void) {
   return 1;
@@ -126,18 +120,6 @@ void PrintTable(const char *strFormat, ...) {
   va_start(arg, strFormat);
   vfprintf(_fTables, strFormat, arg);
   va_end(arg);
-};
-
-void PrintProps(const char *strFormat, ...) {
-  va_list arg;
-  va_start(arg, strFormat);
-  vfprintf(_fProps, strFormat, arg);
-  va_end(arg);
-};
-
-// [Cecil] Check if the property list file is open
-bool IsPropListOpen(void) {
-  return strcmp(_strPropListFile, "") != 0;
 };
 
 // Report error during parsing
@@ -282,11 +264,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2) {
     printf("Usage: Ecc <es_file_name>\n"
       "  -line : Compile without #line preprocessor directives pointing to places in the .es file\n"
-      "  -compat : Make compiled code compatible with vanilla Serious Sam SDK\n"
       "  -export : Export entity class regardless of the 'export' keyword after 'class'\n"
-      "  -proplist <file> : Generate an inline file that defines a list of property references by variable name\n"
-      "    If the file already exists, a list of this entity will be appended at the end of it\n"
-      "    If the filename is '*', it defaults to '_DefinePropertyRefLists.inl' in the same directory as the .es file\n"
     );
     return EXIT_FAILURE;
   }
@@ -303,21 +281,8 @@ int main(int argc, char *argv[]) {
     if (strncmp(argv[iExtra], "-line", 5) == 0) {
       _bRemoveLineDirective = true;
 
-    } else if (strncmp(argv[iExtra], "-compat", 7) == 0) {
-      _bCompatibilityMode = true;
-
     } else if (strncmp(argv[iExtra], "-export", 7) == 0) {
       _bForceExport = true;
-
-    } else if (strncmp(argv[iExtra], "-proplist", 9) == 0) {
-      // Try to get the filename
-      if (iExtra == argc - 1) {
-        fprintf(stderr, "%s: Warning: No output file specified after the '-proplist' argument\n", _strInputFileName);
-        break;
-      }
-
-      iExtra++;
-      _strPropListFile = argv[iExtra];
     }
   }
 
@@ -335,39 +300,6 @@ int main(int argc, char *argv[]) {
   _fImplementation = OpenFile(strImplTmp, "w");
   _fDeclaration    = OpenFile(strDeclTmp, "w");
   _fTables         = OpenFile(strTablTmp, "w");
-
-  // [Cecil] Open property lists
-  int iPropsOpen = 0;
-
-  if (IsPropListOpen()) {
-    char *strFile = _strPropListFile;
-
-    // Use default filename in the same directory
-    if (strcmp(_strPropListFile, "*") == 0) {
-      strFile = ChangeFileName(strFileName, "_DefinePropertyRefLists.inl");
-    }
-
-    // Check if the file already exists
-    _fProps = fopen(strFile, "r");
-
-    // Reopen to append at the end
-    if (_fProps != NULL) {
-      _fProps = freopen(strFile, "a", _fProps);
-
-      // Shouldn't happen
-      if (_fProps == NULL) {
-        fprintf(stderr, "Can't open file '%s' for appending: %s\n", strFile, strerror(errno));
-        return EXIT_FAILURE;
-      }
-
-      iPropsOpen = 1;
-
-    // Create a new file
-    } else {
-      _fProps = OpenFile(strFile, "w");
-      iPropsOpen = 2;
-    }
-  }
 
   // Get filename as a preprocessor-usable identifier
   _strFileNameBase = ChangeExt(strFileName, "");
@@ -393,35 +325,6 @@ int main(int argc, char *argv[]) {
   PrintHeader(_fDeclaration);
   PrintHeader(_fTables);
 
-  // [Cecil] Add necessary stuff at the beginning of property lists
-  if (iPropsOpen == 2) {
-    PrintHeader(_fProps);
-
-    PrintProps("\n"
-      "// [Cecil] NOTE: This inline code can be included in any place that needs to retrieve properties of linked vanilla entities\n"
-      "// by variable name. It can be used in any project that utilizes this SDK. However, before including it, make sure to include\n"
-      "// <EngineEx/PropertyTables.h> header that this code relies on.\n\n"
-
-      "// Example: You can create a method that fills a CPropertyRefTable structure from an argument with all of the property tables\n"
-      "// by defining your own ENTITYPROPERTYREF_ENTRY macro as such:\n"
-      "//   #define ENTITYPROPERTYREF_ENTRY(Class, Refs, RefsCount) map.FillPropertyReferences(#Class, Refs, RefsCount)\n\n\n"
-
-      "#include <EccExtras/EntityProperties.h>\n\n"
-    );
-
-    PrintProps(
-      "// Please specify your own code for this macro\n"
-      "#ifndef ENTITYPROPERTYREF_ENTRY\n"
-      "  #define ENTITYPROPERTYREF_ENTRY(Class, Refs, RefsCount)\n"
-      "#endif\n\n"
-
-      "// You can provide your own declaration specifiers using this macro\n"
-      "#ifndef ENTITYPROPERTYREF_DECL\n"
-      "  #define ENTITYPROPERTYREF_DECL static\n"
-      "#endif\n"
-    );
-  }
-
   // Parse input file and generate the output files
   yyparse();
 
@@ -429,11 +332,6 @@ int main(int argc, char *argv[]) {
   fclose(_fImplementation);
   fclose(_fDeclaration);
   fclose(_fTables);
-
-  // [Cecil]
-  if (iPropsOpen != 0) {
-    fclose(_fProps);
-  }
 
   // If there were no errors
   if (!_bError) {

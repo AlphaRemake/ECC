@@ -20,12 +20,6 @@ static char *_strCurrentPropertyColor;
 static char *_strCurrentPropertyFlags;
 static char *_strCurrentPropertyDefaultCode;
 
-// [Cecil] Entity event list
-static char *_strCurrentEventList;
-
-// [Cecil] Entity property list
-static char *_strCurrentPropertyList;
-
 static char *_strCurrentComponentIdentifier;
 static char *_strCurrentComponentType;
 static char *_strCurrentComponentID;     
@@ -111,20 +105,20 @@ void CreateInternalHandlerFunction(char *strFunctionName, char *strID)
 void DeclareFeatureProperties(void)
 {
   if (_bFeature_CanBePredictable) {
-    /* [Cecil] Print entity property entry separately */
-    char strPropClass[1024];
-    sprintf(strPropClass, "ENGINE_SPECIFIC_PROP_DEF(CEntityProperty::EPT_ENTITYPTR, NULL, (0x%08x<<8)+%s, offsetof(%s, %s), %s, %s, \"%s\", %s, %s)",
-      _iCurrentClassID, "255", _strCurrentClass, "m_penPrediction", "\"\"", "0", "m_penPrediction", "0", "0");
-
-    PrintTable(" %s,\n", strPropClass);
-    PrintDecl("  CEntityPointer m_penPrediction;\n");
+    PrintTable(" CEntityProperty(CEntityProperty::EPT_ENTITYPTR, NULL, (0x%08x<<8)+%s, offsetof(%s, %s), %s, %s, %s, %s),\n",
+      _iCurrentClassID,
+      "255",
+      _strCurrentClass,
+      "m_penPrediction",
+      "\"\"",
+      "0",
+      "0",
+      "0");
+    PrintDecl("  %s %s;\n",
+      "CEntityPointer",
+      "m_penPrediction"
+      );
     PrintImpl("  m_penPrediction = NULL;\n");
-
-    /* [Cecil] Add property reference into the list */
-    char strPropRef[1024];
-    sprintf(strPropRef, "  EntityPropertyRef(\"m_penPrediction\", "
-      "ENGINE_SPECIFIC_PROP_DEF(CEntityProperty::EPT_ENTITYPTR, NULL, (0x%X<<8)+255, 0, \"\", 0, \"m_penPrediction\", 0, 0)),\n", _iCurrentClassID);
-    _strCurrentPropertyList = stradd(_strCurrentPropertyList, strPropRef);
   }
 }
 
@@ -244,11 +238,6 @@ program
     PrintDecl("#ifndef _%s_INCLUDED\n", _strFileNameBaseIdentifier);
     PrintDecl("#define _%s_INCLUDED 1\n", _strFileNameBaseIdentifier);
 
-    /* [Cecil] Include header with ECC extras */
-    if (!_bCompatibilityMode) {
-      PrintDecl("#include <EccExtras.h>\n");
-    }
-
   } opt_global_cppblock {
 
     //PrintImpl("\n#undef DECL_DLL\n#define DECL_DLL _declspec(dllimport)\n");
@@ -257,10 +246,6 @@ program
 
     PrintImpl("#include <%s.h>\n", _strFileNameBase);
     PrintImpl("#include <%s_tables.h>\n", _strFileNameBase);
-    /* [Cecil] Reset lists */
-    _strCurrentEventList = strdup("");
-    _strCurrentPropertyList = strdup("");
-
   } enum_and_event_declarations_list {
   } opt_global_cppblock {
   } opt_class_declaration {
@@ -345,24 +330,6 @@ event_declaration
       _strCurrentEvent, _strCurrentEvent);
     PrintImpl("%s::%s() : CEntityEvent(EVENTCODE_%s) {\n",
       _strCurrentEvent, _strCurrentEvent, _strCurrentEvent);
-
-    /* [Cecil] Not in compatibility mode */
-    if (!_bCompatibilityMode) {
-      /* Define an event constructor */
-      PrintTable("CEntityEvent *%s_New(void) { return new %s; };\n", _strCurrentEvent, _strCurrentEvent);
-
-      /* Define a library event with an extra class size field */
-      PrintTable(
-        "CDLLEntityEvent DLLEvent_%s = {\n"
-        "  0x%08x, &%s_New, sizeof(%s)\n"
-        "};\n",
-        _strCurrentEvent, iID, _strCurrentEvent, _strCurrentEvent);
-
-      char strBuffer[256];
-      sprintf(strBuffer, "  &DLLEvent_%s,\n", _strCurrentEvent);
-      _strCurrentEventList = stradd(strBuffer, _strCurrentEventList);
-    }
-
   } '{' event_members_list opt_comma '}' ';' {
     PrintImpl("};\n");
     PrintDecl("};\n");
@@ -404,26 +371,6 @@ class_declaration
     _strCurrentBase = $4.strString;
     _strCurrentDescription = $7.strString;
     _strCurrentThumbnail = $10.strString;
-
-    /* [Cecil] Not in compatibility mode */
-    if (!_bCompatibilityMode) {
-      /* Define an entity event table to export */
-      if (strlen(_strCurrentEventList) > 0) {
-        PrintTable("CDLLEntityEvent *%s_events[] = {\n%s};\n", _strCurrentClass, _strCurrentEventList);
-        PrintTable("const INDEX %s_eventsct = ARRAYCOUNT(%s_events);\n", _strCurrentClass, _strCurrentClass);
-      } else {
-        PrintTable("CDLLEntityEvent *%s_events[] = {NULL};\n", _strCurrentClass);
-        PrintTable("const INDEX %s_eventsct = 0;\n", _strCurrentClass);
-      }
-
-      /* Declare event list in the header since it's unavailable via CDLLEntityClass before 1.50 */
-      PrintDecl("extern \"C\" DECL_DLL CDLLEntityEvent *%s_events[];\n", _strCurrentClass);
-      PrintDecl("extern \"C\" DECL_DLL const INDEX %s_eventsct;\n\n", _strCurrentClass);
-
-      /* Declare list of entity property references */
-      PrintDecl("extern \"C\" DECL_DLL EntityPropertyRef %s_proprefs[];\n", _strCurrentClass);
-      PrintDecl("extern \"C\" DECL_DLL const INDEX %s_proprefsct;\n\n", _strCurrentClass);
-    }
 
     /* [Cecil] Define class ID */
     PrintDecl("#define %s_ClassID %d\n", _strCurrentClass, _iCurrentClassID);
@@ -515,25 +462,6 @@ class_declaration
     PrintTable("DECLARE_CTFILENAME(_fnm%s_tbn, %s);\n", _strCurrentClass, _strCurrentThumbnail);
 
     PrintDecl("};\n");
-
-    if (!_bCompatibilityMode) {
-      /* [Cecil] Create an entity table entry */
-      PrintTable("\nENTITYTABLEENTRY(%s);\n", _strCurrentClass);
-    }
-
-    if (IsPropListOpen()) {
-      /* [Cecil] Define list of entity property references */
-      if (strlen(_strCurrentPropertyList) > 0) {
-        PrintProps("\nENTITYPROPERTYREF_DECL EntityPropertyRef %s_proprefs[] = {\n%s};\n", _strCurrentClass, _strCurrentPropertyList);
-        PrintProps("ENTITYPROPERTYREF_DECL const INDEX %s_proprefsct = ARRAYCOUNT(%s_proprefs);\n", _strCurrentClass, _strCurrentClass);
-      } else {
-        PrintProps("\nENTITYPROPERTYREF_DECL EntityPropertyRef %s_proprefs[] = { EntityPropertyRef() };\n", _strCurrentClass);
-        PrintProps("ENTITYPROPERTYREF_DECL const INDEX %s_proprefsct = 0;\n", _strCurrentClass);
-      }
-
-      /* [Cecil] Create an entry for these property references */
-      PrintProps("ENTITYPROPERTYREF_ENTRY(%s, %s_proprefs, %s_proprefsct);\n", _strCurrentClass, _strCurrentClass, _strCurrentClass);
-    }
   }
   ;
 
@@ -638,24 +566,12 @@ property_declaration_list
     DeclareFeatureProperties(); // this won't work, but at least it will generate an error!!!!
     PrintTable("  CEntityProperty()\n};\n");
     PrintTable("#define %s_propertiesct 0\n\n\n", _strCurrentClass);
-
-    /* [Cecil] Define empty list of entity property references */
-    if (!_bCompatibilityMode) {
-      PrintTable("EntityPropertyRef %s_proprefs[] = { EntityPropertyRef() };\n", _strCurrentClass);
-      PrintTable("const INDEX %s_proprefsct = 0;\n\n", _strCurrentClass);
-    }
   }
   | nonempty_property_declaration_list opt_comma {
     DeclareFeatureProperties();
     PrintTable("};\n");
     PrintTable("#define %s_propertiesct ARRAYCOUNT(%s_properties)\n\n", 
       _strCurrentClass, _strCurrentClass);
-
-    /* [Cecil] Define list of entity property references */
-    if (!_bCompatibilityMode) {
-      PrintTable("EntityPropertyRef %s_proprefs[] = {\n%s};\n", _strCurrentClass, _strCurrentPropertyList);
-      PrintTable("const INDEX %s_proprefsct = ARRAYCOUNT(%s_proprefs);\n\n", _strCurrentClass, _strCurrentClass);
-    }
   }
   ;
 nonempty_property_declaration_list
@@ -674,7 +590,7 @@ property_declaration
       yyerror((SType("property ID 255 may conflict with 'm_penPrediction', property: ")+$3).strString);
     }
 
-    PrintTable(" ENGINE_SPECIFIC_PROP_DEF(%s, %s, (0x%08x<<8)+%s, offsetof(%s, %s), %s, %s, \"%s\", %s, %s),\n",
+    PrintTable(" CEntityProperty(%s, %s, (0x%08x<<8)+%s, offsetof(%s, %s), %s, %s, %s, %s),\n",
       _strCurrentPropertyPropertyType,
       _strCurrentPropertyEnumType,
       _iCurrentClassID,
@@ -683,23 +599,12 @@ property_declaration
       _strCurrentPropertyIdentifier,
       _strCurrentPropertyName,
       _strCurrentPropertyShortcut,
-      _strCurrentPropertyIdentifier, /* [Cecil] Property name in code */
       _strCurrentPropertyColor,
       _strCurrentPropertyFlags);
 
     PrintDecl("  %s %s;\n",
       _strCurrentPropertyDataType,
       _strCurrentPropertyIdentifier);
-
-    /* [Cecil] Add property reference into the list */
-    char strPropRef[1024];
-    sprintf(strPropRef, "  EntityPropertyRef(\"%s\", ENGINE_SPECIFIC_PROP_DEF(%s, NULL, (0x%X<<8)+%s, 0, %s, %s, \"%s\", %s, %s)),\n",
-      _strCurrentPropertyIdentifier, _strCurrentPropertyPropertyType,
-      _iCurrentClassID, _strCurrentPropertyID,
-      _strCurrentPropertyName, _strCurrentPropertyShortcut, _strCurrentPropertyIdentifier,
-      _strCurrentPropertyColor, _strCurrentPropertyFlags);
-
-    _strCurrentPropertyList = stradd(_strCurrentPropertyList, strPropRef);
 
     if (strlen(_strCurrentPropertyDefaultCode)>0) {
       PrintImpl("  %s\n", _strCurrentPropertyDefaultCode);
@@ -762,7 +667,7 @@ property_type
     _strCurrentPropertyDataType = "INDEX";
   }
   | k_TIME { /* [Cecil] Expanded timer type */
-    _strCurrentPropertyPropertyType = "ENGINE_SPECIFIC_EPT_TIME"; 
+    _strCurrentPropertyPropertyType = "CEntityProperty::EPT_FLOAT"; 
     _strCurrentPropertyEnumType = "NULL"; 
     _strCurrentPropertyDataType = "TIME";
   }

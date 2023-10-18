@@ -43,9 +43,7 @@ extern char *_strFileNameBase;
 extern char *_strFileNameBaseIdentifier;
 
 // [Cecil] New options
-extern bool _bCompatibilityMode;
 extern bool _bForceExport;
-extern char *_strPropListFile;
 
 // Entity component flags
 #define CF_EDITOR (1UL << 1)
@@ -62,7 +60,3 @@ char *GetLineDirective(SType &st);
 void PrintDecl(const char *strFormat, ...);
 void PrintImpl(const char *strFormat, ...);
 void PrintTable(const char *strFormat, ...);
-void PrintProps(const char *strFormat, ...);
-
-// [Cecil] Check if the property list file is open
-bool IsPropListOpen(void);
